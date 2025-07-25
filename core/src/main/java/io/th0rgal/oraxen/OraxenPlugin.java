@@ -2,6 +2,7 @@ package io.th0rgal.oraxen;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.settings.PacketEventsSettings;
 import dev.jorel.commandapi.CommandAPI;
 import dev.jorel.commandapi.CommandAPIBukkitConfig;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
@@ -78,11 +79,17 @@ public class OraxenPlugin extends JavaPlugin {
         CommandAPI.onLoad(new CommandAPIBukkitConfig(this).silentLogs(true).skipReloadDatapacks(true));
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
         PacketEvents.getAPI().load();
+
+        PacketEvents.getAPI().getEventManager().registerListener(new BreakerSystem(), PacketListenerPriority.NORMAL);
+        if (Settings.FORMAT_INVENTORY_TITLES.toBool())
+            PacketEvents.getAPI().getEventManager().registerListener(new InventoryPacketListener(), PacketListenerPriority.NORMAL);
+        PacketEvents.getAPI().getEventManager().registerListener(new TitlePacketListener(), PacketListenerPriority.NORMAL);
     }
 
     @Override
     public void onEnable() {
         CommandAPI.onEnable();
+        PacketEvents.getAPI().init();
         ProtectionLib.init(this);
         audience = BukkitAudiences.create(this);
         clickActionManager = new ClickActionManager(this);
@@ -92,11 +99,6 @@ public class OraxenPlugin extends JavaPlugin {
 
         if (Settings.KEEP_UP_TO_DATE.toBool())
             new SettingsUpdater().handleSettingsUpdate();
-        PacketEvents.getAPI().init();
-        PacketEvents.getAPI().getEventManager().registerListener(new BreakerSystem(), PacketListenerPriority.NORMAL);
-        if (Settings.FORMAT_INVENTORY_TITLES.toBool())
-            PacketEvents.getAPI().getEventManager().registerListener(new InventoryPacketListener(), PacketListenerPriority.NORMAL);
-        PacketEvents.getAPI().getEventManager().registerListener(new TitlePacketListener(), PacketListenerPriority.NORMAL);
         Bukkit.getPluginManager().registerEvents(new CustomArmorListener(), this);
         NMSHandlers.setup();
 
@@ -131,7 +133,6 @@ public class OraxenPlugin extends JavaPlugin {
 
     private void postLoading() {
         new Metrics(this, 5371);
-        new LU().l();
         Bukkit.getScheduler().runTask(this, () -> Bukkit.getPluginManager().callEvent(new OraxenItemsLoadedEvent()));
     }
 

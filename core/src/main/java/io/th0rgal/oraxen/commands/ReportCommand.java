@@ -40,6 +40,7 @@ public class ReportCommand {
                             - Architecture: %s
                             """,
                             oraxenVersion,
+                            serverSoftware,
                             serverVersion,
                             osName,
                             osVersion,

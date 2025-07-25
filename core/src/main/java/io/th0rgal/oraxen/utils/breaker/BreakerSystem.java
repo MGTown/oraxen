@@ -59,7 +59,7 @@ public class BreakerSystem implements PacketListener {
             return;
         }
 
-        final Player player = (Player) event.getPlayer();
+        final Player player = event.getPlayer();
         final ItemStack item = player.getInventory().getItemInMainHand();
         if (player.getGameMode() == GameMode.CREATIVE) return;
 

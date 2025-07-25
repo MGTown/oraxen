@@ -100,7 +100,7 @@ allprojects {
         compileOnly("org.apache.commons:commons-lang3:$apacheLang3Version")
 
         implementation("team.unnamed:creative-api:1.7.3") { exclude("net.kyori") }
-        implementation("com.github.retrooper:packetevents-spigot:2.9.3")
+        implementation("com.github.retrooper:packetevents-spigot:2.9.4")
         implementation("dev.jorel:commandapi-bukkit-shade:$commandApiVersion")
         implementation("org.bstats:bstats-bukkit:3.0.0")
         implementation("org.glassfish:javax.json:1.1.4")
@@ -148,7 +148,7 @@ tasks {
     }
 
     runServer {
-        minecraftVersion("1.20.4")
+        minecraftVersion("1.21.7")
     }
 
     shadowJar {
