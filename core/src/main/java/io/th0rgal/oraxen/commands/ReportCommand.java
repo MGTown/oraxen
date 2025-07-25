@@ -14,11 +14,6 @@ public class ReportCommand {
                     // Get Oraxen version
                     String oraxenVersion = OraxenPlugin.get().getDescription().getVersion();
 
-                    // Get ProtocolLib version
-                    Plugin protocolLib = Bukkit.getPluginManager().getPlugin("ProtocolLib");
-                    String protocolLibVersion = protocolLib != null ? protocolLib.getDescription().getVersion()
-                            : "Not installed";
-
                     // Get server info
                     String serverSoftware = Bukkit.getName();
                     String serverVersion = Bukkit.getVersion();
@@ -34,7 +29,6 @@ public class ReportCommand {
                             ### System Report
                             **Plugin Versions:**
                             - Oraxen: %s
-                            - ProtocolLib: %s
 
                             **Server Information:**
                             - Software: %s
@@ -46,8 +40,6 @@ public class ReportCommand {
                             - Architecture: %s
                             """,
                             oraxenVersion,
-                            protocolLibVersion,
-                            serverSoftware,
                             serverVersion,
                             osName,
                             osVersion,

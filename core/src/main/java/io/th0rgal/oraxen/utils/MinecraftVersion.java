@@ -17,15 +17,14 @@
 
 package io.th0rgal.oraxen.utils;
 
-import com.comphenix.protocol.ProtocolLibrary;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.manager.server.ServerVersion;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Ordering;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -211,16 +210,18 @@ public final class MinecraftVersion implements Comparable<MinecraftVersion>, Ser
             }
 
             try {
-                // Determine if the snapshot is newer than the current release version
-                snapshot = new SnapshotVersion(section[0]);
-                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+                ServerVersion serverVersion = PacketEvents.getAPI().getServerManager().getVersion();
 
-                MinecraftVersion latest = new MinecraftVersion(ProtocolLibrary.MAXIMUM_MINECRAFT_VERSION, false);
-                boolean newer = snapshot.getSnapshotDate().compareTo(
-                        format.parse(ProtocolLibrary.MINECRAFT_LAST_RELEASE_DATE)) > 0;
+                if (section[0].contains("w") || section[0].contains("-")) {
+                    snapshot = new SnapshotVersion(section[0]);
 
-                numbers[0] = latest.getMajor();
-                numbers[1] = latest.getMinor() + (newer ? 1 : -1);
+                    String serverVersionString = serverVersion.getReleaseName();
+                    parseVersionFromString(serverVersionString, numbers);
+
+                    numbers[1]++;
+                } else {
+                    parseVersionFromString(section[0], numbers);
+                }
             } catch (Exception e) {
                 throw new IllegalStateException("Cannot parse " + section[0], e);
             }
@@ -231,6 +232,33 @@ public final class MinecraftVersion implements Comparable<MinecraftVersion>, Ser
         this.build = numbers[2];
         this.development = section.length > 1 ? section[1] : (snapshot != null ? "snapshot" : null);
         this.snapshot = snapshot;
+    }
+
+    private void parseVersionFromString(String versionString, int[] numbers) {
+        String cleanVersion = versionString.replaceAll("[^0-9.]", "");
+
+        if (cleanVersion.startsWith("1.")) {
+            String[] parts = cleanVersion.split("\\.");
+            numbers[0] = 1;
+            if (parts.length >= 2) {
+                try {
+                    numbers[1] = Integer.parseInt(parts[1]);
+                } catch (NumberFormatException e) {
+                    numbers[1] = 20;
+                }
+            }
+            if (parts.length >= 3) {
+                try {
+                    numbers[2] = Integer.parseInt(parts[2]);
+                } catch (NumberFormatException e) {
+                    numbers[2] = 0;
+                }
+            }
+        } else {
+            numbers[0] = 1;
+            numbers[1] = 20;
+            numbers[2] = 0;
+        }
     }
 
     /**

@@ -48,8 +48,7 @@ import static io.th0rgal.oraxen.mechanics.provided.gameplay.furniture.FurnitureM
 public class FurnitureListener implements Listener {
 
     public FurnitureListener() {
-        if (PluginUtils.isEnabled("ProtocolLib"))
-            BreakerSystem.MODIFIERS.add(getHardnessModifier());
+        BreakerSystem.MODIFIERS.add(getHardnessModifier());
     }
 
     private HardnessModifier getHardnessModifier() {

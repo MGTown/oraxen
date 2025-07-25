@@ -41,8 +41,7 @@ import java.util.Random;
 public class StringBlockMechanicListener implements Listener {
 
     public StringBlockMechanicListener() {
-        if (PluginUtils.isEnabled("ProtocolLib"))
-            BreakerSystem.MODIFIERS.add(getHardnessModifier());
+        BreakerSystem.MODIFIERS.add(getHardnessModifier());
     }
 
     public static class StringBlockMechanicPaperListener implements Listener {

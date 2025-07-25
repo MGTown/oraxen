@@ -1,14 +1,13 @@
 package io.th0rgal.oraxen.utils.breaker;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.StructureModifier;
-import com.comphenix.protocol.wrappers.BlockPosition;
-import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockBreakAnimation;
 import io.th0rgal.oraxen.OraxenPlugin;
 import io.th0rgal.oraxen.api.OraxenBlocks;
 import io.th0rgal.oraxen.api.OraxenFurniture;
@@ -48,158 +47,162 @@ import java.util.function.Consumer;
 
 import static io.th0rgal.oraxen.mechanics.provided.gameplay.block.BlockMechanicFactory.getBlockMechanic;
 
-public class BreakerSystem {
+public class BreakerSystem implements PacketListener {
 
     public static final List<HardnessModifier> MODIFIERS = new ArrayList<>();
     private final Map<Location, BukkitScheduler> breakerPerLocation = new HashMap<>();
     private final Map<Location, BukkitTask> breakerPlaySound = new HashMap<>();
-    private final PacketAdapter listener = new PacketAdapter(OraxenPlugin.get(),
-            ListenerPriority.LOW, PacketType.Play.Client.BLOCK_DIG) {
-        @Override
-        public void onPacketReceiving(final PacketEvent event) {
-            final PacketContainer packet = event.getPacket();
-            final Player player = event.getPlayer();
-            final ItemStack item = player.getInventory().getItemInMainHand();
-            if (player.getGameMode() == GameMode.CREATIVE) return;
 
-            final StructureModifier<BlockPosition> dataTemp = packet.getBlockPositionModifier();
-            final StructureModifier<EnumWrappers.Direction> dataDirection = packet.getDirections();
-            final StructureModifier<EnumWrappers.PlayerDigType> data = packet
-                    .getEnumModifier(EnumWrappers.PlayerDigType.class, 2);
-            EnumWrappers.PlayerDigType type;
-            try {
-                type = data.getValues().getFirst();
-            } catch (IllegalArgumentException exception) {
-                type = EnumWrappers.PlayerDigType.SWAP_HELD_ITEMS;
-            }
+    @Override
+    public void onPacketReceive(PacketReceiveEvent event) {
+        if (event.getPacketType() != PacketType.Play.Client.PLAYER_DIGGING) {
+            return;
+        }
 
-            final BlockPosition pos = dataTemp.getValues().getFirst();
-            final World world = player.getWorld();
-            final Block block = world.getBlockAt(pos.getX(), pos.getY(), pos.getZ());
-            final Location location = block.getLocation();
-            final BlockFace blockFace = dataDirection.size() > 0 ?
-                    BlockFace.valueOf(dataDirection.read(0).name()) :
-                    BlockFace.UP;
+        final Player player = (Player) event.getPlayer();
+        final ItemStack item = player.getInventory().getItemInMainHand();
+        if (player.getGameMode() == GameMode.CREATIVE) return;
 
-            HardnessModifier triggeredModifier = null;
-            for (final HardnessModifier modifier : MODIFIERS) {
-                if (modifier.isTriggered(player, block, item)) {
-                    triggeredModifier = modifier;
-                    break;
-                }
-            }
-            if (triggeredModifier == null) return;
-            final long period = triggeredModifier.getPeriod(player, block, item);
-            if (period == 0) return;
+        final WrapperPlayClientPlayerDigging packet = new WrapperPlayClientPlayerDigging(event);
+        final Vector3i blockPos = packet.getBlockPosition();
+        final DiggingAction diggingAction = packet.getAction();
 
-            NoteBlockMechanic noteMechanic = OraxenBlocks.getNoteBlockMechanic(block);
-            StringBlockMechanic stringMechanic = OraxenBlocks.getStringMechanic(block);
-            FurnitureMechanic furnitureMechanic = OraxenFurniture.getFurnitureMechanic(block);
-            if (block.getType() == Material.NOTE_BLOCK && noteMechanic == null) return;
-            if (block.getType() == Material.TRIPWIRE && stringMechanic == null) return;
-            if (block.getType() == Material.BARRIER && furnitureMechanic == null) return;
+        final World world = player.getWorld();
+        final Block block = world.getBlockAt(blockPos.getX(), blockPos.getY(), blockPos.getZ());
+        final Location location = block.getLocation();
+        final BlockFace blockFace = convertToBlockFace(packet.getBlockFace());
 
-            event.setCancelled(true);
-
-            if (type == EnumWrappers.PlayerDigType.START_DESTROY_BLOCK) {
-                // Get these when block is started being broken to minimize checks & allow for proper damage checks later
-                final Drop drop;
-                if (furnitureMechanic != null)
-                    drop = furnitureMechanic.getDrop() != null ? furnitureMechanic.getDrop() : Drop.emptyDrop();
-                else if (noteMechanic != null)
-                    drop = noteMechanic.getDrop() != null ? noteMechanic.getDrop() : Drop.emptyDrop();
-                else if (stringMechanic != null)
-                    drop = stringMechanic.getDrop() != null ? stringMechanic.getDrop() : Drop.emptyDrop();
-                else drop = null;
-
-                Bukkit.getScheduler().runTask(OraxenPlugin.get(), () ->
-                        player.addPotionEffect(new PotionEffect(PotionUtils.getEffectType("mining_fatigue"),
-                                (int) (period * 11),
-                                Integer.MAX_VALUE,
-                                false, false, false)));
-
-                if (breakerPerLocation.containsKey(location))
-                    breakerPerLocation.get(location).cancelTasks(OraxenPlugin.get());
-
-                final BukkitScheduler scheduler = Bukkit.getScheduler();
-                // Cancellation state is being ignored.
-                // However still needs to be called for plugin support.
-                final PlayerInteractEvent playerInteractEvent =
-                        new PlayerInteractEvent(player, Action.LEFT_CLICK_BLOCK, player.getInventory().getItemInMainHand(), block, blockFace, EquipmentSlot.HAND);
-                scheduler.runTask(OraxenPlugin.get(), () -> Bukkit.getPluginManager().callEvent(playerInteractEvent));
-
-                breakerPerLocation.put(location, scheduler);
-
-                // If the relevant damage event is cancelled, return
-                if (blockDamageEventCancelled(block, player)) {
-                    stopBlockBreaker(location);
-                    return;
-                }
-
-                // Methods for sending multi-barrier block-breaks
-                final List<Location> furnitureBarrierLocations = furnitureBarrierLocations(furnitureMechanic, block);
-                final HardnessModifier modifier = triggeredModifier;
-                startBlockHitSound(location);
-
-                scheduler.runTaskTimer(OraxenPlugin.get(), new Consumer<>() {
-                    int value = 0;
-
-                    @Override
-                    public void accept(final BukkitTask bukkitTask) {
-                        if (!breakerPerLocation.containsKey(location)) {
-                            bukkitTask.cancel();
-                            stopBlockHitSound(location);
-                            return;
-                        }
-
-                        if (item.getEnchantmentLevel(EnchantmentWrapper.EFFICIENCY) >= 5)
-                            value = 10;
-
-                        for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16)) {
-                            if (entity instanceof Player viewer) {
-                                if (furnitureMechanic != null) for (Location barrierLoc : furnitureBarrierLocations)
-                                    sendBlockBreak(viewer, barrierLoc, value);
-                                else sendBlockBreak(viewer, location, value);
-                            }
-                        }
-
-                        if (value++ < 10) return;
-                        if (EventUtils.callEvent(new BlockBreakEvent(block, player)) && ProtectionLib.canBreak(player, location)) {
-                            // Damage item with properties identified earlier
-                            ItemUtils.damageItem(player, drop, item);
-                            modifier.breakBlock(player, block, item);
-                        } else stopBlockHitSound(location);
-
-                        scheduler.runTask(OraxenPlugin.get(), () ->
-                                player.removePotionEffect(PotionUtils.getEffectType("mining_fatigue")));
-
-                        stopBlockBreaker(location);
-                        stopBlockHitSound(location);
-                        for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16)) {
-                            if (entity instanceof Player viewer) {
-                                if (furnitureMechanic != null) for (Location barrierLoc : furnitureBarrierLocations)
-                                    sendBlockBreak(viewer, barrierLoc, value);
-                                else sendBlockBreak(viewer, location, value);
-                            }
-                        }
-                        bukkitTask.cancel();
-                    }
-                }, period, period);
-            } else {
-                Bukkit.getScheduler().runTask(OraxenPlugin.get(), () -> {
-                    player.removePotionEffect(PotionUtils.getEffectType("mining_fatigue"));
-                    if (!ProtectionLib.canBreak(player, location))
-                        player.sendBlockChange(location, block.getBlockData());
-
-                    for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16))
-                        if (entity instanceof Player viewer)
-                            sendBlockBreak(viewer, location, 10);
-                    stopBlockBreaker(location);
-                    stopBlockHitSound(location);
-                });
+        HardnessModifier triggeredModifier = null;
+        for (final HardnessModifier modifier : MODIFIERS) {
+            if (modifier.isTriggered(player, block, item)) {
+                triggeredModifier = modifier;
+                break;
             }
         }
-    };
+        if (triggeredModifier == null) return;
+        final long period = triggeredModifier.getPeriod(player, block, item);
+        if (period == 0) return;
+
+        NoteBlockMechanic noteMechanic = OraxenBlocks.getNoteBlockMechanic(block);
+        StringBlockMechanic stringMechanic = OraxenBlocks.getStringMechanic(block);
+        FurnitureMechanic furnitureMechanic = OraxenFurniture.getFurnitureMechanic(block);
+        if (block.getType() == Material.NOTE_BLOCK && noteMechanic == null) return;
+        if (block.getType() == Material.TRIPWIRE && stringMechanic == null) return;
+        if (block.getType() == Material.BARRIER && furnitureMechanic == null) return;
+
+        event.setCancelled(true);
+
+        if (diggingAction == DiggingAction.START_DIGGING) {
+            // Get these when block is started being broken to minimize checks & allow for proper damage checks later
+            final Drop drop;
+            if (furnitureMechanic != null)
+                drop = furnitureMechanic.getDrop() != null ? furnitureMechanic.getDrop() : Drop.emptyDrop();
+            else if (noteMechanic != null)
+                drop = noteMechanic.getDrop() != null ? noteMechanic.getDrop() : Drop.emptyDrop();
+            else if (stringMechanic != null)
+                drop = stringMechanic.getDrop() != null ? stringMechanic.getDrop() : Drop.emptyDrop();
+            else drop = null;
+
+            Bukkit.getScheduler().runTask(OraxenPlugin.get(), () ->
+                    player.addPotionEffect(new PotionEffect(PotionUtils.getEffectType("mining_fatigue"),
+                            (int) (period * 11),
+                            Integer.MAX_VALUE,
+                            false, false, false)));
+
+            if (breakerPerLocation.containsKey(location))
+                breakerPerLocation.get(location).cancelTasks(OraxenPlugin.get());
+
+            final BukkitScheduler scheduler = Bukkit.getScheduler();
+            // Cancellation state is being ignored.
+            // However still needs to be called for plugin support.
+            final PlayerInteractEvent playerInteractEvent =
+                    new PlayerInteractEvent(player, Action.LEFT_CLICK_BLOCK, player.getInventory().getItemInMainHand(), block, blockFace, EquipmentSlot.HAND);
+            scheduler.runTask(OraxenPlugin.get(), () -> Bukkit.getPluginManager().callEvent(playerInteractEvent));
+
+            breakerPerLocation.put(location, scheduler);
+
+            // If the relevant damage event is cancelled, return
+            if (blockDamageEventCancelled(block, player)) {
+                stopBlockBreaker(location);
+                return;
+            }
+
+            // Methods for sending multi-barrier block-breaks
+            final List<Location> furnitureBarrierLocations = furnitureBarrierLocations(furnitureMechanic, block);
+            final HardnessModifier modifier = triggeredModifier;
+            startBlockHitSound(location);
+
+            scheduler.runTaskTimer(OraxenPlugin.get(), new Consumer<>() {
+                int value = 0;
+
+                @Override
+                public void accept(final BukkitTask bukkitTask) {
+                    if (!breakerPerLocation.containsKey(location)) {
+                        bukkitTask.cancel();
+                        stopBlockHitSound(location);
+                        return;
+                    }
+
+                    if (item.getEnchantmentLevel(EnchantmentWrapper.EFFICIENCY) >= 5)
+                        value = 10;
+
+                    for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16)) {
+                        if (entity instanceof Player viewer) {
+                            if (furnitureMechanic != null) for (Location barrierLoc : furnitureBarrierLocations)
+                                sendBlockBreak(viewer, barrierLoc, value);
+                            else sendBlockBreak(viewer, location, value);
+                        }
+                    }
+
+                    if (value++ < 10) return;
+                    if (EventUtils.callEvent(new BlockBreakEvent(block, player)) && ProtectionLib.canBreak(player, location)) {
+                        // Damage item with properties identified earlier
+                        ItemUtils.damageItem(player, drop, item);
+                        modifier.breakBlock(player, block, item);
+                    } else stopBlockHitSound(location);
+
+                    scheduler.runTask(OraxenPlugin.get(), () ->
+                            player.removePotionEffect(PotionUtils.getEffectType("mining_fatigue")));
+
+                    stopBlockBreaker(location);
+                    stopBlockHitSound(location);
+                    for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16)) {
+                        if (entity instanceof Player viewer) {
+                            if (furnitureMechanic != null) for (Location barrierLoc : furnitureBarrierLocations)
+                                sendBlockBreak(viewer, barrierLoc, value);
+                            else sendBlockBreak(viewer, location, value);
+                        }
+                    }
+                    bukkitTask.cancel();
+                }
+            }, period, period);
+        } else if (diggingAction == DiggingAction.CANCELLED_DIGGING ||
+                diggingAction == DiggingAction.FINISHED_DIGGING) {
+            Bukkit.getScheduler().runTask(OraxenPlugin.get(), () -> {
+                player.removePotionEffect(PotionUtils.getEffectType("mining_fatigue"));
+                if (!ProtectionLib.canBreak(player, location))
+                    player.sendBlockChange(location, block.getBlockData());
+
+                for (final Entity entity : world.getNearbyEntities(location, 16, 16, 16))
+                    if (entity instanceof Player viewer)
+                        sendBlockBreak(viewer, location, 10);
+                stopBlockBreaker(location);
+                stopBlockHitSound(location);
+            });
+        }
+    }
+
+    private BlockFace convertToBlockFace(com.github.retrooper.packetevents.protocol.world.BlockFace packetFace) {
+        return switch (packetFace) {
+            case DOWN -> BlockFace.DOWN;
+            case UP -> BlockFace.UP;
+            case NORTH -> BlockFace.NORTH;
+            case SOUTH -> BlockFace.SOUTH;
+            case WEST -> BlockFace.WEST;
+            case EAST -> BlockFace.EAST;
+            default -> BlockFace.UP;
+        };
+    }
 
     private List<Location> furnitureBarrierLocations(FurnitureMechanic furnitureMechanic, Block block) {
         BukkitScheduler scheduler = breakerPerLocation.get(block.getLocation());
@@ -257,11 +260,15 @@ public class BreakerSystem {
     }
 
     private void sendBlockBreak(final Player player, final Location location, final int stage) {
-        final PacketContainer packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.BLOCK_BREAK_ANIMATION);
-        packet.getIntegers().write(0, location.hashCode()).write(1, stage);
-        packet.getBlockPositionModifier().write(0, new BlockPosition(location.toVector()));
+        // 使用 PacketEvents 发送方块破坏动画数据包
+        final WrapperPlayServerBlockBreakAnimation packet = new WrapperPlayServerBlockBreakAnimation(
+                location.hashCode(), // Entity ID
+                new Vector3i(location.getBlockX(), location.getBlockY(), location.getBlockZ()), // Block position
+                (byte) stage // Break stage (0-10)
+        );
 
-        ProtocolLibrary.getProtocolManager().sendServerPacket(player, packet);
+        // 发送数据包给玩家
+        PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
     }
 
     private void stopBlockBreaker(Location location) {
@@ -288,10 +295,6 @@ public class BreakerSystem {
     private void stopBlockHitSound(Location location) {
         Optional.ofNullable(breakerPlaySound.get(location)).ifPresent(BukkitTask::cancel);
         breakerPlaySound.remove(location);
-    }
-
-    public void registerListener() {
-        ProtocolLibrary.getProtocolManager().addPacketListener(listener);
     }
 
     private BlockSounds getBlockSounds(Block block) {

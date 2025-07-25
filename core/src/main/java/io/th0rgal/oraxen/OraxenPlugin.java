@@ -1,8 +1,10 @@
 package io.th0rgal.oraxen;
 
-import com.comphenix.protocol.ProtocolLibrary;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import dev.jorel.commandapi.CommandAPI;
 import dev.jorel.commandapi.CommandAPIBukkitConfig;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import io.th0rgal.oraxen.api.OraxenItems;
 import io.th0rgal.oraxen.api.events.OraxenItemsLoadedEvent;
 import io.th0rgal.oraxen.commands.CommandsManager;
@@ -27,7 +29,6 @@ import io.th0rgal.oraxen.utils.armorequipevent.ArmorEquipEvent;
 import io.th0rgal.oraxen.utils.breaker.BreakerSystem;
 import io.th0rgal.oraxen.utils.customarmor.CustomArmorListener;
 import io.th0rgal.oraxen.utils.inventories.InvManager;
-import io.th0rgal.oraxen.utils.logs.Logs;
 import io.th0rgal.protectionlib.ProtectionLib;
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import org.bstats.bukkit.Metrics;
@@ -75,6 +76,8 @@ public class OraxenPlugin extends JavaPlugin {
     @Override
     public void onLoad() {
         CommandAPI.onLoad(new CommandAPIBukkitConfig(this).silentLogs(true).skipReloadDatapacks(true));
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().load();
     }
 
     @Override
@@ -89,14 +92,11 @@ public class OraxenPlugin extends JavaPlugin {
 
         if (Settings.KEEP_UP_TO_DATE.toBool())
             new SettingsUpdater().handleSettingsUpdate();
-        if (PluginUtils.isEnabled("ProtocolLib")) {
-            new BreakerSystem().registerListener();
-            if (Settings.FORMAT_INVENTORY_TITLES.toBool())
-                ProtocolLibrary.getProtocolManager().addPacketListener(new InventoryPacketListener());
-            ProtocolLibrary.getProtocolManager().addPacketListener(new TitlePacketListener());
-        } else {
-            Message.MISSING_PROTOCOLLIB.log();
-        }
+        PacketEvents.getAPI().init();
+        PacketEvents.getAPI().getEventManager().registerListener(new BreakerSystem(), PacketListenerPriority.NORMAL);
+        if (Settings.FORMAT_INVENTORY_TITLES.toBool())
+            PacketEvents.getAPI().getEventManager().registerListener(new InventoryPacketListener(), PacketListenerPriority.NORMAL);
+        PacketEvents.getAPI().getEventManager().registerListener(new TitlePacketListener(), PacketListenerPriority.NORMAL);
         Bukkit.getPluginManager().registerEvents(new CustomArmorListener(), this);
         NMSHandlers.setup();
 
@@ -125,8 +125,6 @@ public class OraxenPlugin extends JavaPlugin {
         } catch (Exception ignore) {
         }
         CompatibilitiesManager.enableNativeCompatibilities();
-        if (VersionUtil.isCompiled())
-            NoticeUtils.compileNotice();
         if (VersionUtil.isLeaked())
             NoticeUtils.leakNotice();
     }
@@ -147,6 +145,7 @@ public class OraxenPlugin extends JavaPlugin {
 
         CompatibilitiesManager.disableCompatibilities();
         CommandAPI.onDisable();
+        PacketEvents.getAPI().terminate();
         Message.PLUGIN_UNLOADED.log();
     }
 

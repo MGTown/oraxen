@@ -1,29 +1,36 @@
 package io.th0rgal.oraxen.font.packets;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.*;
-import com.comphenix.protocol.wrappers.WrappedChatComponent;
-import com.comphenix.protocol.wrappers.WrappedNumberFormat;
-import io.th0rgal.oraxen.OraxenPlugin;
+import com.github.retrooper.packetevents.event.PacketListener;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.score.ScoreFormat;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerScoreboardObjective;
+import net.kyori.adventure.text.Component;
 
 import java.util.Optional;
 
-public class ScoreboardPacketListener extends PacketAdapter {
+public class ScoreboardPacketListener implements PacketListener {
 
-    public ScoreboardPacketListener() {
-        super(OraxenPlugin.get(), ListenerPriority.MONITOR, PacketType.Play.Server.SCOREBOARD_OBJECTIVE);
-    }
+    private final Optional<ScoreFormat> numberFormat = Optional.of(
+            ScoreFormat.fixedScore(Component.text("test"))
+    );
 
-    private final Optional<InternalStructure> numberFormat = Optional.of(InternalStructure.getConverter().getSpecific(WrappedNumberFormat.fixed(WrappedChatComponent.fromText("test")).getHandle()));
     @Override
-    public void onPacketSending(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
+    public void onPacketSend(PacketSendEvent event) {
+        if (event.getPacketType() != PacketType.Play.Server.SCOREBOARD_OBJECTIVE) {
+            return;
+        }
+
         try {
-            if (packet.getIntegers().read(0) == 1) return;
-            packet.getOptionalStructures().write(0, numberFormat);
-        } catch (Exception ignored) {
-            ignored.printStackTrace();
+            WrapperPlayServerScoreboardObjective wrapper = new WrapperPlayServerScoreboardObjective(event);
+
+            if (wrapper.getMode() == WrapperPlayServerScoreboardObjective.ObjectiveMode.REMOVE) {
+                return;
+            }
+
+            wrapper.setScoreFormat(numberFormat.get());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
-
 }

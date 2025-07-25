@@ -97,8 +97,7 @@ public class MechanicsManager {
         registerFactory("bottledexp", BottledExpMechanicFactory::new);
         registerFactory("harvesting", HarvestingMechanicFactory::new);
         registerFactory("watering", WateringMechanicFactory::new);
-        if (CompatibilitiesManager.hasPlugin("ProtocolLib"))
-            registerFactory("bedrockbreak", BedrockBreakMechanicFactory::new);
+        registerFactory("bedrockbreak", BedrockBreakMechanicFactory::new);
 
         Bukkit.getScheduler().callSyncMethod(OraxenPlugin.get(), () -> {
             Bukkit.getPluginManager().callEvent(new OraxenNativeMechanicsRegisteredEvent());

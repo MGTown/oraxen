@@ -1,29 +1,49 @@
 package io.th0rgal.oraxen.font.packets;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.WrappedChatComponent;
-import io.th0rgal.oraxen.OraxenPlugin;
+import com.github.retrooper.packetevents.event.*;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerOpenWindow;
 import io.th0rgal.oraxen.utils.PacketHelpers;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 
-public class InventoryPacketListener extends PacketAdapter {
+public class InventoryPacketListener extends PacketListenerCommon implements PacketListener {
 
-    public InventoryPacketListener() {
-        super(OraxenPlugin.get(), ListenerPriority.MONITOR, PacketType.Play.Server.OPEN_WINDOW);
+    @Override
+    public PacketListenerAbstract asAbstract(PacketListenerPriority priority) {
+        return PacketListener.super.asAbstract(priority);
     }
 
     @Override
-    public void onPacketSending(PacketEvent event) {
-        PacketContainer packet = event.getPacket();
-        try {
-            String chat = PacketHelpers.readJson(packet.getChatComponents().read(0).getJson());
-            packet.getChatComponents().write(0, WrappedChatComponent.fromJson(PacketHelpers.toJson(chat)));
-        } catch (Exception ignored) {
+    public void onPacketSend(PacketSendEvent event) {
+        if (event.getPacketType() != PacketType.Play.Server.OPEN_WINDOW) {
+            return;
+        }
 
+        try {
+            WrapperPlayServerOpenWindow wrapper = new WrapperPlayServerOpenWindow(event);
+            Component originalTitle = wrapper.getTitle();
+
+            if (originalTitle != null) {
+                Component processedTitle = processInventoryTitle(originalTitle);
+                if (processedTitle != null) {
+                    wrapper.setTitle(processedTitle);
+                }
+            }
+        } catch (Exception ignored) {
         }
     }
 
+    private Component processInventoryTitle(Component title) {
+        try {
+            String json = GsonComponentSerializer.gson().serialize(title);
+
+            String processedText = PacketHelpers.readJson(json);
+            String formattedJson = PacketHelpers.toJson(processedText);
+
+            return GsonComponentSerializer.gson().deserialize(formattedJson);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

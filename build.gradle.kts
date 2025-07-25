@@ -49,8 +49,9 @@ allprojects {
         maven("https://repo.papermc.io/repository/maven-public/") // Paper
         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/") // Spigot
         maven("https://oss.sonatype.org/content/repositories/snapshots") // Because Spigot depends on Bungeecord ChatComponent-API
-        maven("https://repo.dmulloy2.net/repository/public/") // ProtocolLib
+        // maven("https://repo.dmulloy2.net/repository/public/") // ProtocolLib
         maven("https://libraries.minecraft.net/") // Minecraft repo (commodore)
+        maven("https://repo.codemc.io/repository/maven-releases/") // PacketEvents
         maven("https://repo.extendedclip.com/content/repositories/placeholderapi/") // PlaceHolderAPI
         maven("https://maven.elmakers.com/repository/") // EffectLib
         maven("https://hub.jeff-media.com/nexus/repository/jeff-media-public/") // CustomBlockData
@@ -76,7 +77,7 @@ allprojects {
         compileOnly("net.kyori:adventure-text-serializer-plain:$adventureVersion")
         compileOnly("net.kyori:adventure-text-serializer-ansi:$adventureVersion")
         compileOnly("net.kyori:adventure-platform-bukkit:$platformVersion")
-        compileOnly("com.comphenix.protocol:ProtocolLib:5.3.0")
+        // compileOnly("com.comphenix.protocol:ProtocolLib:5.3.0")
         compileOnly("me.clip:placeholderapi:2.11.6")
         compileOnly("me.gabytm.util:actions-core:$actionsVersion")
         compileOnly("org.springframework:spring-expression:6.0.6")
@@ -99,6 +100,7 @@ allprojects {
         compileOnly("org.apache.commons:commons-lang3:$apacheLang3Version")
 
         implementation("team.unnamed:creative-api:1.7.3") { exclude("net.kyori") }
+        implementation("com.github.retrooper:packetevents-spigot:2.9.3")
         implementation("dev.jorel:commandapi-bukkit-shade:$commandApiVersion")
         implementation("org.bstats:bstats-bukkit:3.0.0")
         implementation("org.glassfish:javax.json:1.1.4")
@@ -146,9 +148,6 @@ tasks {
     }
 
     runServer {
-        downloadPlugins {
-            url("https://ci.dmulloy2.net/job/ProtocolLib/lastSuccessfulBuild/artifact/build/libs/ProtocolLib.jar")
-        }
         minecraftVersion("1.20.4")
     }
 
@@ -194,7 +193,6 @@ bukkit {
     apiVersion = "1.18"
     authors = listOf("th0rgal", "https://github.com/oraxen/oraxen/blob/master/CONTRIBUTORS.md")
     softDepend = listOf(
-        "ProtocolLib",
         "LightAPI", "PlaceholderAPI", "MythicMobs", "MMOItems", "MythicCrucible", "MythicMobs", "BossShopPro",
         "CrateReloaded", "ItemBridge", "WorldEdit", "WorldGuard", "Towny", "Factions", "Lands", "PlotSquared",
         "NBTAPI", "ModelEngine", "ViaBackwards", "HuskClaims", "HuskTowns", "BentoBox"

@@ -43,7 +43,7 @@ import static io.th0rgal.oraxen.utils.BlockHelpers.isLoaded;
 public class NoteBlockMechanicListener implements Listener {
 
     public NoteBlockMechanicListener() {
-        if (PluginUtils.isEnabled("ProtocolLib")) BreakerSystem.MODIFIERS.add(getHardnessModifier());
+        BreakerSystem.MODIFIERS.add(getHardnessModifier());
     }
 
     public static class NoteBlockMechanicPaperListener implements Listener {
